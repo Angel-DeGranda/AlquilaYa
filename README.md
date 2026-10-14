@@ -85,8 +85,8 @@ Los datos de entrada de los POST de alquileres y mantenimientos (`AlquilerReques
 1. Clona el repositorio y entra a la carpeta del proyecto:
 
    ```bash
-   git clone <url-del-repositorio>
-   cd alquilaya
+   git clone https://github.com/Angel-DeGranda/AlquilaYa.git
+   cd AlquilaYa
    ```
 
 2. Crea la base de datos en MySQL:
