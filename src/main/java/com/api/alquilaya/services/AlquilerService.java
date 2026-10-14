@@ -5,16 +5,18 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
-import com.api.alquilaya.exception.RecursoNoEncontradoException;
-import com.api.alquilaya.exception.ReglaNegocioException;
 import com.api.alquilaya.models.AlquilerModel;
 import com.api.alquilaya.models.ClienteModel;
 import com.api.alquilaya.models.VehiculoModel;
 import com.api.alquilaya.repositories.IAlquilerRepository;
 import com.api.alquilaya.repositories.IClienteRepository;
 import com.api.alquilaya.repositories.IVehiculoRepository;
+
+import jakarta.transaction.Transactional;
 
 @Service
 public class AlquilerService {
@@ -24,8 +26,8 @@ public class AlquilerService {
     private final IClienteRepository clienteRepository;
 
     public AlquilerService(IAlquilerRepository alquilerRepository,
-            IVehiculoRepository vehiculoRepository,
-            IClienteRepository clienteRepository) {
+                           IVehiculoRepository vehiculoRepository,
+                           IClienteRepository clienteRepository) {
         this.alquilerRepository = alquilerRepository;
         this.vehiculoRepository = vehiculoRepository;
         this.clienteRepository = clienteRepository;
@@ -35,18 +37,32 @@ public class AlquilerService {
         return alquilerRepository.findAll();
     }
 
-    public AlquilerModel crear(Long idVehiculo, Long idCliente, LocalDate fechaInicio, LocalDate fechaFin) {
-        VehiculoModel vehiculo = vehiculoRepository.findById(idVehiculo)
-                .orElseThrow(() -> new RecursoNoEncontradoException("Vehículo no encontrado con id " + idVehiculo));
-        ClienteModel cliente = clienteRepository.findById(idCliente)
-                .orElseThrow(() -> new RecursoNoEncontradoException("Cliente no encontrado con id " + idCliente));
+    public AlquilerModel buscarPorId(Long id) {
+        return alquilerRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Alquiler no encontrado con id " + id));
+    }
 
-        if (!vehiculo.estaDisponible()) {
-            throw new ReglaNegocioException("El vehículo no está disponible");
-        }
+    @Transactional
+    public AlquilerModel crear(Long idVehiculo, Long idCliente, LocalDate fechaInicio, LocalDate fechaFin) {
+        if (!fechaFin.isAfter(fechaInicio))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "La fecha de fin debe ser posterior a la fecha de inicio");
+
+        VehiculoModel vehiculo = vehiculoRepository.findById(idVehiculo)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Vehículo no encontrado con id " + idVehiculo));
+        ClienteModel cliente = clienteRepository.findById(idCliente)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Cliente no encontrado con id " + idCliente));
+
+        if (cliente.getEstatus() != ClienteModel.ClienteStatus.Activo)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El cliente no está activo");
+        if (!vehiculo.estaDisponible())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El vehículo no está disponible");
 
         int dias = (int) ChronoUnit.DAYS.between(fechaInicio, fechaFin);
-        BigDecimal precioTotal = vehiculo.calcularPrecioAlquiler(dias);
+        BigDecimal precioTotal = vehiculo.calcularPrecioAlquiler(dias); // polimórfico
 
         AlquilerModel alquiler = new AlquilerModel();
         alquiler.setVehiculo(vehiculo);
@@ -62,14 +78,12 @@ public class AlquilerService {
         return alquilerRepository.save(alquiler);
     }
 
-    public AlquilerModel buscarPorId(Long id) {
-        return alquilerRepository.findById(id)
-                .orElseThrow(() -> new RecursoNoEncontradoException("Alquiler no encontrado con id " + id));
-    }
-
+    @Transactional
     public AlquilerModel completar(Long idAlquiler) {
-        AlquilerModel alquiler = alquilerRepository.findById(idAlquiler)
-                .orElseThrow(() -> new RecursoNoEncontradoException("Alquiler no encontrado con id " + idAlquiler));
+        AlquilerModel alquiler = buscarPorId(idAlquiler);
+
+        if (alquiler.getEstatus() == AlquilerModel.AlquilerStatus.Completado)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El alquiler ya fue completado");
 
         alquiler.setEstatus(AlquilerModel.AlquilerStatus.Completado);
         alquilerRepository.save(alquiler);

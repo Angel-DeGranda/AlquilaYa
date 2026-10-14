@@ -1,4 +1,4 @@
-package com.api.alquilaya.exception;
+package com.api.alquilaya.controllers;
 
 import java.time.LocalDateTime;
 import java.util.stream.Collectors;
@@ -10,25 +10,24 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(RecursoNoEncontradoException.class)
-    public ResponseEntity<ErrorResponse> noEncontrado(RecursoNoEncontradoException ex) {
-        return construir(HttpStatus.NOT_FOUND, ex.getMessage());
+    // Estructura única de las respuestas de error
+    public record ErrorResponse(LocalDateTime timestamp, int status, String error, String mensaje) {
     }
 
-    @ExceptionHandler(RecursoDuplicadoException.class)
-    public ResponseEntity<ErrorResponse> duplicado(RecursoDuplicadoException ex) {
-        return construir(HttpStatus.CONFLICT, ex.getMessage());
+    // Errores lanzados desde los services (404, 409, 400)
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> estado(ResponseStatusException ex) {
+        HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
+        String mensaje = ex.getReason() != null ? ex.getReason() : status.getReasonPhrase();
+        return construir(status, mensaje);
     }
 
-    @ExceptionHandler(ReglaNegocioException.class)
-    public ResponseEntity<ErrorResponse> reglaNegocio(ReglaNegocioException ex) {
-        return construir(HttpStatus.BAD_REQUEST, ex.getMessage());
-    }
-
+    // Falla de @Valid en el cuerpo de la petición
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> validacion(MethodArgumentNotValidException ex) {
         String detalle = ex.getBindingResult().getFieldErrors().stream()
@@ -37,11 +36,13 @@ public class GlobalExceptionHandler {
         return construir(HttpStatus.BAD_REQUEST, detalle);
     }
 
+    // JSON mal formado, fecha inválida, valor de enum que no existe...
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> jsonInvalido(HttpMessageNotReadableException ex) {
         return construir(HttpStatus.BAD_REQUEST, "El cuerpo de la petición es inválido o está mal formado");
     }
 
+    // FK (borrar una oficina con vehículos) o unique violado
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> integridad(DataIntegrityViolationException ex) {
         return construir(HttpStatus.CONFLICT,

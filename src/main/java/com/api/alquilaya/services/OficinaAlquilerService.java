@@ -2,9 +2,10 @@ package com.api.alquilaya.services;
 
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
-import com.api.alquilaya.exception.RecursoNoEncontradoException;
 import com.api.alquilaya.models.OficinaAlquilerModel;
 import com.api.alquilaya.repositories.IOficinaAlquilerRepository;
 
@@ -25,18 +26,12 @@ public class OficinaAlquilerService {
 
     public OficinaAlquilerModel buscarPorId(Long id) {
         return oficinaRepository.findById(id)
-                .orElseThrow(() -> new RecursoNoEncontradoException("Oficina no encontrada con id " + id));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Oficina no encontrada con id " + id));
     }
 
     public OficinaAlquilerModel guardar(OficinaAlquilerModel oficina) {
         return oficinaRepository.save(oficina);
-    }
-
-    public void eliminar(Long id) {
-        if (!oficinaRepository.existsById(id)) {
-            throw new RecursoNoEncontradoException("Oficina no encontrada con id " + id);
-        }
-        oficinaRepository.deleteById(id);
     }
 
     @Transactional
@@ -47,5 +42,11 @@ public class OficinaAlquilerService {
         oficina.setCiudad(datos.getCiudad());
         oficina.setRegion(datos.getRegion());
         return oficinaRepository.save(oficina);
+    }
+
+    public void eliminar(Long id) {
+        if (!oficinaRepository.existsById(id))
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Oficina no encontrada con id " + id);
+        oficinaRepository.deleteById(id);
     }
 }

@@ -64,13 +64,13 @@ El proyecto sigue una arquitectura en capas:
 ```
 com.api.alquilaya
 ├── config         Seguridad (SecurityConfig) y carga inicial de usuarios
-├── controllers    Controladores REST (@RestController)
-├── dto            Objetos de entrada (AlquilerRequest, MantenimientoRequest)
-├── exception      Excepciones propias y manejador global de errores
+├── controllers    Controladores REST (@RestController) y manejador global de errores (GlobalExceptionHandler)
 ├── models         Entidades JPA (@Entity)
 ├── repositories   Interfaces que extienden JpaRepository
 └── services       Lógica de negocio (@Service)
 ```
+
+Los datos de entrada de los POST de alquileres y mantenimientos (`AlquilerRequest` y `MantenimientoRequest`) son records anidados dentro de su controller. Los services lanzan `ResponseStatusException` con el código HTTP que corresponde (400, 404 o 409), y `GlobalExceptionHandler` los convierte en la respuesta de error uniforme que se describe en la sección de manejo de errores.
 
 ## Pasos de instalación y ejecución
 
@@ -97,7 +97,7 @@ com.api.alquilaya
 
    Las tablas se crean solas al iniciar la aplicación (`spring.jpa.hibernate.ddl-auto=update`).
 
-3. Define las variables de entorno de la siguiente sección.
+3. Ajusta `src/main/resources/application.properties` con los datos de tu base de datos local (ver la sección de configuración más abajo).
 
 ### Ejecución
 
@@ -122,48 +122,46 @@ Al iniciar, la aplicación crea automáticamente un usuario con rol `ADMIN` y ot
 Con las credenciales del administrador (HTTP Basic), esta petición debe responder `200` con el texto `Acceso autorizado`:
 
 ```bash
-curl -u <ADMIN_EMAIL>:<ADMIN_PASSWORD> http://localhost:8080/api/admin/prueba
+curl -u admin@alquilaya.com:Admin1234 http://localhost:8080/api/admin/prueba
 ```
 
-## Variables de entorno necesarias
+## Variables de configuración necesarias
 
-| Variable | Descripción | Ejemplo |
-|---|---|---|
-| `DB_URL` | URL de conexión a MySQL | `jdbc:mysql://localhost:3306/alquilaya` |
-| `DB_USERNAME` | Usuario de MySQL | `root` |
-| `DB_PASSWORD` | Contraseña de MySQL | `<tu-contraseña>` |
-| `ADMIN_EMAIL` | Correo del usuario administrador inicial | `admin@alquilaya.com` |
-| `ADMIN_PASSWORD` | Contraseña del administrador inicial | `<contraseña-segura>` |
-| `OPERADOR_EMAIL` | Correo del usuario operador inicial | `operador@alquilaya.com` |
-| `OPERADOR_PASSWORD` | Contraseña del operador inicial | `<contraseña-segura>` |
+Toda la configuración está en `src/main/resources/application.properties`. El proyecto no usa variables de entorno: los valores se escriben directamente en ese archivo.
 
-El archivo `src/main/resources/application.properties` las lee así:
+**Antes de ejecutar, cambia `spring.datasource.url`, `spring.datasource.username` y `spring.datasource.password` por los de tu servidor MySQL local.** Esos valores dependen de cada equipo, y si no coinciden con tu base de datos la aplicación no podrá conectarse.
+
+| Propiedad | Descripción | Valor de ejemplo | Se debe cambiar |
+|---|---|---|---|
+| `spring.datasource.url` | URL de conexión a MySQL | `jdbc:mysql://localhost:3306/alquilaya` | Si tu servidor, puerto o nombre de base de datos son distintos |
+| `spring.datasource.username` | Usuario de MySQL | `tu_usuario` | Sí, por el tuyo |
+| `spring.datasource.password` | Contraseña de MySQL | `tu_contraseña` | Sí, por la tuya |
+| `server.port` | Puerto en el que corre la API | `8080` | Opcional |
+| `spring.jpa.hibernate.ddl-auto` | Crea o actualiza las tablas al iniciar | `update` | No |
+| `app.admin.email` y `app.admin.password` | Usuario administrador inicial | `admin@alquilaya.com` / `Admin1234` | Opcional |
+| `app.operador.email` y `app.operador.password` | Usuario operador inicial | `operador@alquilaya.com` / `Operador1234` | Opcional |
+
+Contenido del archivo:
 
 ```properties
 spring.application.name=alquilaya
 
 server.port=8080
 
-spring.datasource.url=${DB_URL:jdbc:mysql://localhost:3306/alquilaya}
-spring.datasource.username=${DB_USERNAME:root}
-spring.datasource.password=${DB_PASSWORD}
+spring.datasource.url=jdbc:mysql://localhost:3306/alquilaya
+spring.datasource.username=tu_usuario
+spring.datasource.password=tu_contraseña
 spring.jpa.hibernate.ddl-auto=update
 spring.jpa.open-in-view=false
 
-app.admin.email=${ADMIN_EMAIL:admin@alquilaya.com}
-app.admin.password=${ADMIN_PASSWORD}
+app.admin.email=admin@alquilaya.com
+app.admin.password=Admin1234
 
-app.operador.email=${OPERADOR_EMAIL:operador@alquilaya.com}
-app.operador.password=${OPERADOR_PASSWORD}
+app.operador.email=operador@alquilaya.com
+app.operador.password=Operador1234
 ```
 
-Las contraseñas no tienen valor por defecto a propósito, para no publicarlas en el repositorio. Ejemplo de configuración en Windows (PowerShell) antes de ejecutar:
-
-```powershell
-$env:DB_PASSWORD="<tu-contraseña>"
-$env:ADMIN_PASSWORD="<contraseña-segura>"
-$env:OPERADOR_PASSWORD="<contraseña-segura>"
-```
+Los usuarios de `app.admin.*` y `app.operador.*` se crean automáticamente al iniciar la aplicación, y son los que se usan con Basic Auth para probar la API. Solo se crean si su correo todavía no existe: si cambias la contraseña de un usuario que ya fue creado, el cambio no se aplica.
 
 ## Autenticación y roles
 

@@ -2,12 +2,11 @@ package com.api.alquilaya.services;
 
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
-import com.api.alquilaya.exception.RecursoDuplicadoException;
-import com.api.alquilaya.exception.RecursoNoEncontradoException;
-import com.api.alquilaya.exception.ReglaNegocioException;
 import com.api.alquilaya.models.OficinaAlquilerModel;
 import com.api.alquilaya.models.TrabajadorModel;
 import com.api.alquilaya.repositories.IOficinaAlquilerRepository;
@@ -19,13 +18,15 @@ import jakarta.transaction.Transactional;
 public class TrabajadorService {
 
     private final ITrabajadorRepository trabajadorRepository;
-    private final PasswordEncoder passwordEncoder;
     private final IOficinaAlquilerRepository oficinaRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public TrabajadorService(ITrabajadorRepository trabajadorRepository, PasswordEncoder passwordEncoder, IOficinaAlquilerRepository oficinaRepository) {
+    public TrabajadorService(ITrabajadorRepository trabajadorRepository,
+                             IOficinaAlquilerRepository oficinaRepository,
+                             PasswordEncoder passwordEncoder) {
         this.trabajadorRepository = trabajadorRepository;
-        this.passwordEncoder = passwordEncoder;
         this.oficinaRepository = oficinaRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public List<TrabajadorModel> listarTodos() {
@@ -34,20 +35,26 @@ public class TrabajadorService {
 
     public TrabajadorModel buscarPorId(Long id) {
         return trabajadorRepository.findById(id)
-                .orElseThrow(() -> new RecursoNoEncontradoException("Trabajador no encontrado con id " + id));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Trabajador no encontrado con id " + id));
+    }
+
+    private OficinaAlquilerModel obtenerOficina(TrabajadorModel trabajador) {
+        if (trabajador.getOficina().getIdOficina() == null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes indicar la oficina (idOficina)");
+        return oficinaRepository.findById(trabajador.getOficina().getIdOficina())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Oficina no encontrada"));
     }
 
     public TrabajadorModel crear(TrabajadorModel trabajador) {
-        if (trabajador.getPassword() == null || trabajador.getPassword().isBlank()) {
-            throw new ReglaNegocioException("La contraseña es obligatoria");
-        }
-        if (trabajadorRepository.existsByEmail(trabajador.getEmail())) {
-            throw new RecursoDuplicadoException("Ya existe un trabajador con ese email");
-        }
-        if (trabajadorRepository.existsByLicenciaConducir(trabajador.getLicenciaConducir())) {
-            throw new RecursoDuplicadoException("Ya existe un trabajador con esa licencia");
-        }
+        if (trabajador.getPassword() == null || trabajador.getPassword().isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La contraseña es obligatoria");
+        if (trabajadorRepository.existsByEmail(trabajador.getEmail()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe un trabajador con ese email");
+        if (trabajadorRepository.existsByLicenciaConducir(trabajador.getLicenciaConducir()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe un trabajador con esa licencia");
 
+        trabajador.setOficina(obtenerOficina(trabajador));
         trabajador.setPassword(passwordEncoder.encode(trabajador.getPassword()));
         return trabajadorRepository.save(trabajador);
     }
@@ -56,20 +63,13 @@ public class TrabajadorService {
     public TrabajadorModel actualizar(Long id, TrabajadorModel datos) {
         TrabajadorModel trabajador = buscarPorId(id);
 
-        if (!trabajador.getEmail().equals(datos.getEmail()) && trabajadorRepository.existsByEmail(datos.getEmail())) {
-            throw new RecursoDuplicadoException("Ya existe un trabajador con ese email");
-        }
+        if (!trabajador.getEmail().equals(datos.getEmail()) && trabajadorRepository.existsByEmail(datos.getEmail()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe un trabajador con ese email");
         if (!trabajador.getLicenciaConducir().equals(datos.getLicenciaConducir())
-                && trabajadorRepository.existsByLicenciaConducir(datos.getLicenciaConducir())) {
-            throw new RecursoDuplicadoException("Ya existe un trabajador con esa licencia");
-        }
+                && trabajadorRepository.existsByLicenciaConducir(datos.getLicenciaConducir()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe un trabajador con esa licencia");
 
-        if (datos.getOficina().getIdOficina() == null) {
-            throw new ReglaNegocioException("Debes indicar la oficina (idOficina)");
-        }
-        OficinaAlquilerModel oficina = oficinaRepository.findById(datos.getOficina().getIdOficina())
-                .orElseThrow(() -> new RecursoNoEncontradoException("Oficina no encontrada"));
-
+        trabajador.setOficina(obtenerOficina(datos));
         trabajador.setNombre(datos.getNombre());
         trabajador.setApellidos(datos.getApellidos());
         trabajador.setEmail(datos.getEmail());
@@ -77,18 +77,15 @@ public class TrabajadorService {
         trabajador.setFechaNacimiento(datos.getFechaNacimiento());
         trabajador.setLicenciaConducir(datos.getLicenciaConducir());
         trabajador.setEstatus(datos.getEstatus());
-        trabajador.setOficina(oficina);
-        if (datos.getPassword() != null && !datos.getPassword().isBlank()) {
+        if (datos.getPassword() != null && !datos.getPassword().isBlank())
             trabajador.setPassword(passwordEncoder.encode(datos.getPassword()));
-        }
 
         return trabajadorRepository.save(trabajador);
     }
 
     public void eliminar(Long id) {
-        if (!trabajadorRepository.existsById(id)) {
-            throw new RecursoNoEncontradoException("Trabajador no encontrado con id " + id);
-        }
+        if (!trabajadorRepository.existsById(id))
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Trabajador no encontrado con id " + id);
         trabajadorRepository.deleteById(id);
     }
 }

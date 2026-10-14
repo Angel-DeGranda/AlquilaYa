@@ -2,11 +2,10 @@ package com.api.alquilaya.services;
 
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
-import com.api.alquilaya.exception.RecursoDuplicadoException;
-import com.api.alquilaya.exception.RecursoNoEncontradoException;
-import com.api.alquilaya.exception.ReglaNegocioException;
 import com.api.alquilaya.models.CocheElectricoModel;
 import com.api.alquilaya.models.FurgonetaModel;
 import com.api.alquilaya.models.MotoModel;
@@ -23,7 +22,8 @@ public class VehiculoService {
     private final IVehiculoRepository vehiculoRepository;
     private final IOficinaAlquilerRepository oficinaRepository;
 
-    public VehiculoService(IVehiculoRepository vehiculoRepository, IOficinaAlquilerRepository oficinaRepository) {
+    public VehiculoService(IVehiculoRepository vehiculoRepository,
+                           IOficinaAlquilerRepository oficinaRepository) {
         this.vehiculoRepository = vehiculoRepository;
         this.oficinaRepository = oficinaRepository;
     }
@@ -38,13 +38,22 @@ public class VehiculoService {
 
     public VehiculoModel buscarPorId(Long id) {
         return vehiculoRepository.findById(id)
-                .orElseThrow(() -> new RecursoNoEncontradoException("Vehículo no encontrado con id " + id));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Vehículo no encontrado con id " + id));
+    }
+
+    private OficinaAlquilerModel obtenerOficina(VehiculoModel vehiculo) {
+        if (vehiculo.getOficina().getIdOficina() == null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes indicar la oficina (idOficina)");
+        return oficinaRepository.findById(vehiculo.getOficina().getIdOficina())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Oficina no encontrada"));
     }
 
     public VehiculoModel crear(VehiculoModel vehiculo) {
-        if (vehiculoRepository.existsByMatricula(vehiculo.getMatricula())) {
-            throw new RecursoDuplicadoException("Ya existe un vehículo con esa matrícula");
-        }
+        if (vehiculoRepository.existsByMatricula(vehiculo.getMatricula()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe un vehículo con esa matrícula");
+
+        vehiculo.setOficina(obtenerOficina(vehiculo));
         return vehiculoRepository.save(vehiculo);
     }
 
@@ -52,27 +61,20 @@ public class VehiculoService {
     public VehiculoModel actualizar(Long id, VehiculoModel datos) {
         VehiculoModel vehiculo = buscarPorId(id);
 
-        if (vehiculo.getClass() != datos.getClass()) {
-            throw new ReglaNegocioException("No se puede cambiar el tipo de un vehículo");
-        }
+        if (vehiculo.getClass() != datos.getClass())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede cambiar el tipo de un vehículo");
         if (!vehiculo.getMatricula().equals(datos.getMatricula())
-                && vehiculoRepository.existsByMatricula(datos.getMatricula())) {
-            throw new RecursoDuplicadoException("Ya existe un vehículo con esa matrícula");
-        }
+                && vehiculoRepository.existsByMatricula(datos.getMatricula()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe un vehículo con esa matrícula");
 
-        if (datos.getOficina().getIdOficina() == null) {
-            throw new ReglaNegocioException("Debes indicar la oficina (idOficina)");
-        }
-        OficinaAlquilerModel oficina = oficinaRepository.findById(datos.getOficina().getIdOficina())
-                .orElseThrow(() -> new RecursoNoEncontradoException("Oficina no encontrada"));
-
-        vehiculo.setOficina(oficina);
+        vehiculo.setOficina(obtenerOficina(datos));
         vehiculo.setMarca(datos.getMarca());
         vehiculo.setModelo(datos.getModelo());
         vehiculo.setAnio(datos.getAnio());
         vehiculo.setMatricula(datos.getMatricula());
         vehiculo.setTarifaDiaria(datos.getTarifaDiaria());
 
+        // atributos propios de cada subtipo
         if (vehiculo instanceof MotoModel m && datos instanceof MotoModel d) {
             m.setCilindrada(d.getCilindrada());
         } else if (vehiculo instanceof FurgonetaModel f && datos instanceof FurgonetaModel d) {
@@ -86,9 +88,8 @@ public class VehiculoService {
     }
 
     public void eliminar(Long id) {
-        if (!vehiculoRepository.existsById(id)) {
-            throw new RecursoNoEncontradoException("Vehículo no encontrado con id " + id);
-        }
+        if (!vehiculoRepository.existsById(id))
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Vehículo no encontrado con id " + id);
         vehiculoRepository.deleteById(id);
     }
 }
